@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Financial Flow</title>
+    
+    <!-- iOS Native PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Financial Flow">
+    <meta name="theme-color" content="#0F1411">
+    
+    <!-- iOS App Icon (Dynamically Generated SVG Data URI) -->
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%2393C5AF'><rect width='512' height='512' rx='120' fill='%230F1411'/><path d='M160 360 C200 280, 240 280, 280 340 C320 400, 360 220, 400 140' stroke='%2393C5AF' stroke-width='32' fill='none' stroke-linecap='round'/><circle cx='400' cy='140' r='24' fill='%2393C5AF'/></svg>">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%2393C5AF'><rect width='512' height='512' rx='120' fill='%230F1411'/><path d='M160 360 C200 280, 240 280, 280 340 C320 400, 360 220, 400 140' stroke='%2393C5AF' stroke-width='32' fill='none' stroke-linecap='round'/><circle cx='400' cy='140' r='24' fill='%2393C5AF'/></svg>">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome Icons & Chart.js & SheetJS libraries -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bgMain: '#0F1411',
+                        bgCard: '#18201B',
+                        bgHover: '#222E27',
+                        accentGreen: '#93C5AF',
+                        accentGreenLight: '#BCE3D2',
+                        accentRed: '#E88B88',
+                        accentRedLight: '#F3B8B6',
+                        borderDark: '#28362E',
+                        textMuted: '#9BAA9E'
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', 'San Francisco', 'Segoe UI', 'Roboto', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom iOS Safe Area styles and smooth native animations */
+        :root {
+            --sat: env(safe-area-inset-top, 20px);
+            --sab: env(safe-area-inset-bottom, 20px);
+        }
+        
+        body {
+            background-color: #0F1411;
+            color: #E2E8F0;
+            padding-top: var(--sat);
+            padding-bottom: calc(var(--sab) + 70px);
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        .safe-pb {
+            padding-bottom: calc(var(--sab) + 12px);
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Bottom Sheet Transition */
+        .bottom-sheet {
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .bottom-sheet-hidden {
+            transform: translateY(100%);
+        }
+
+        /* Custom Input styling */
+        input, select, textarea {
+            font-size: 16px !important; /* Prevents auto zoom on iOS Safari */
+        }
+    </style>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col justify-between">
+
+    <div id="app" class="w-full max-w-md mx-auto px-4 pt-3 pb-6 flex-1 flex flex-col gap-5">
+        
+        <!-- Header / App Bar -->
+        <header class="flex items-center justify-between py-2 border-b border-borderDark/50">
+            <div class="flex items-center gap-2.5">
+                <div class="w-10 h-10 rounded-2xl bg-accentGreen/15 flex items-center justify-center border border-accentGreen/30 text-accentGreen">
+                    <i class="fa-solid me-0 fa-chart-line text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-wide text-white">Financial Flow</h1>
+                    <p class="text-xs text-textMuted font-medium">Gestione Budget iPhone</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button onclick="exportToExcel()" title="Esporta Excel" class="w-9 h-9 rounded-xl bg-bgCard border border-borderDark hover:bg-bgHover text-accentGreen flex items-center justify-center active:scale-95 transition">
+                    <i class="fa-solid fa-file-excel text-base"></i>
+                </button>
+                <label for="excel-import-input" title="Importa Excel" class="w-9 h-9 rounded-xl bg-bgCard border border-borderDark hover:bg-bgHover text-textMuted flex items-center justify-center active:scale-95 transition cursor-pointer">
+                    <i class="fa-solid fa-file-import text-base"></i>
+                </label>
+                <input type="file" id="excel-import-input" accept=".xlsx, .xls" class="hidden" onchange="importFromExcel(event)">
+            </div>
+        </header>
+
+        
+        <!-- VIEW 1: DASHBOARD ANNUALE -->
+        <main id="view-annual" class="view-section flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-sm uppercase tracking-wider text-textMuted font-semibold">Prospetto Anno (12 Mesi)</h2>
+                <span class="text-xs bg-bgCard px-2.5 py-1 rounded-full text-accentGreen border border-borderDark font-mono">Ott '26 - Set '27</span>
+            </div>
+
+            <!-- KPI Cards Grid -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-bgCard border border-borderDark rounded-2xl p-3.5 flex flex-col gap-1">
+                    <span class="text-xs text-textMuted flex items-center gap-1.5"><i class="fa-solid fa-arrow-down-left text-accentGreen"></i> Entrate Anno</span>
+                    <span id="kpi-annual-income" class="text-xl font-extrabold text-accentGreen font-mono">€ 0.00</span>
+                </div>
+                <div class="bg-bgCard border border-borderDark rounded-2xl p-3.5 flex flex-col gap-1">
+                    <span class="text-xs text-textMuted flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right text-accentRed"></i> Spese Anno</span>
+                    <span id="kpi-annual-expenses" class="text-xl font-extrabold text-accentRed font-mono">€ 0.00</span>
+                </div>
+                <div class="bg-bgCard border border-borderDark rounded-2xl p-3.5 flex flex-col gap-1">
+                    <span class="text-xs text-textMuted flex items-center gap-1.5"><i class="fa-solid fa-piggy-bank text-accentGreen"></i> Risparmio Totale</span>
+                    <span id="kpi-annual-savings" class="text-xl font-extrabold text-white font-mono">€ 0.00</span>
+                </div>
+                <div class="bg-bgCard border border-borderDark rounded-2xl p-3.5 flex flex-col gap-1">
+                    <span class="text-xs text-textMuted flex items-center gap-1.5"><i class="fa-solid fa-calculator text-textMuted"></i> Media Risparmio / Mese</span>
+                    <span id="kpi-annual-avg" class="text-xl font-extrabold text-textMuted font-mono">€ 0.00</span>
+                </div>
+            </div>
+
+            <!-- Annual Bar Chart -->
+            <div class="bg-bgCard border border-borderDark rounded-2xl p-4 flex flex-col gap-3">
+                <h3 class="text-xs font-semibold text-textMuted uppercase tracking-wider">Andamento Mensile</h3>
+                <div class="h-48 w-full relative">
+                    <canvas id="annualChart"></canvas>
+                </div>
+            </div>
+        </main>
+
+        <!-- VIEW 2: MESE CORRENTE -->
+        <main id="view-monthly" class="view-section hidden flex flex-col gap-4">
+            <!-- Month Selector Carousel -->
+            <div class="flex items-center justify-between bg-bgCard border border-borderDark p-2 rounded-2xl">
+                <button onclick="changeMonth(-1)" class="w-9 h-9 rounded-xl hover:bg-bgHover flex items-center justify-center text-textMuted active:scale-95 transition">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <div class="text-center">
+                    <div id="current-month-display" class="font-bold text-base text-white">Ottobre 2026</div>
+                    <div id="month-status-tag" class="text-[10px] text-accentGreen font-semibold uppercase tracking-wider">Mese Attivo</div>
+                </div>
+                <button onclick="changeMonth(1)" class="w-9 h-9 rounded-xl hover:bg-bgHover flex items-center justify-center text-textMuted active:scale-95 transition">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+
+            <!-- Monthly Summary Cards -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-bgCard border border-borderDark rounded-2xl p-3.5 flex flex-col gap-1">
+                    <span class="text-xs text-textMuted">Entrate Mensili</span>
+                    <span id="month-income" class="text-lg font-bold text-accentGreen font-mono">€ 0.00</span>
+                </div>
+                <div class="bg-bgCard border border-borderDark rounded-2xl p-3.5 flex flex-col gap-1">
+                    <span class="text-xs text-textMuted">Spese Totali</span>
+                    <span id="month-expenses" class="text-lg font-bold text-accentRed font-mono">€ 0.00</span>
+                </div>
+                <div class="bg-bgCard border border-borderDark rounded-2xl p-3.5 flex flex-col gap-1">
+                    <span class="text-xs text-textMuted">Risparmio Netto</span>
+                    <span id="month-savings" class="text-lg font-bold text-white font-mono">€ 0.00</span>
+                </div>
+                <div class="bg-bgCard border border-borderDark rounded-2xl p-3.5 flex flex-col gap-1">
+                    <span class="text-xs text-textMuted">Risparmio Settimanale</span>
+                    <span id="month-weekly-savings" class="text-lg font-bold text-accentGreenLight font-mono">€ 0.00</span>
+                </div>
+            </div>
+
+            <!-- Monthly Breakdown Chart -->
+            <div class="bg-bgCard border border-borderDark rounded-2xl p-4 flex flex-col gap-3">
+                <h3 class="text-xs font-semibold text-textMuted uppercase tracking-wider">Ripartizione Spese (Essenziali vs Extra)</h3>
+                <div class="h-44 w-full relative flex justify-center items-center">
+                    <canvas id="monthlyPieChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Transaction Logs -->
+            <div class="flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xs font-semibold text-textMuted uppercase tracking-wider">Movimenti del Mese</h3>
+                    <span id="tx-count" class="text-xs text-textMuted">0 movimenti</span>
+                </div>
+                
+                <div id="transactions-list" class="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1 no-scrollbar">
+                    <!-- Dynamic Transaction items will be inserted here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Floating Add Button -->
+    <div class="fixed bottom-20 right-5 z-20">
+        <button onclick="openModal()" class="w-14 h-14 bg-accentGreen text-bgMain rounded-full shadow-lg flex items-center justify-center text-xl font-bold active:scale-90 transition transform shadow-accentGreen/20">
+            <i class="fa-solid fa-plus"></i>
+        </button>
+    </div>
+
+    <!-- iOS Native Style Bottom Navigation Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-bgCard/90 backdrop-blur-md border-t border-borderDark z-30 safe-pb">
+        <div class="max-w-md mx-auto grid grid-cols-2 h-14">
+            <button id="nav-annual" onclick="switchTab('annual')" class="flex flex-col items-center justify-center gap-1 text-accentGreen font-medium transition">
+                <i class="fa-solid fa-chart-pie text-lg"></i>
+                <span class="text-[11px]">Prospetto Anno</span>
+            </button>
+            <button id="nav-monthly" onclick="switchTab('monthly')" class="flex flex-col items-center justify-center gap-1 text-textMuted font-medium transition">
+                <i class="fa-solid fa-calendar-days text-lg"></i>
+                <span class="text-[11px]">Mese Corrente</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Quick-Add Entry Bottom Sheet Modal -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 hidden transition-opacity opacity-0" onclick="closeModal()"></div>
+    
+    <div id="modal-sheet" class="fixed bottom-0 left-0 right-0 z-50 bg-bgCard border-t border-borderDark rounded-t-3xl p-5 bottom-sheet bottom-sheet-hidden max-w-md mx-auto safe-pb">
+        <div class="w-12 h-1.5 bg-borderDark rounded-full mx-auto mb-4"></div>
+        <div class="flex items-center justify-between mb-4">
+            <h3 id="modal-title" class="text-base font-bold text-white">Nuovo Movimento</h3>
+            <button onclick="closeModal()" class="text-textMuted hover:text-white p-1">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <form id="transaction-form" onsubmit="handleSaveTransaction(event)" class="flex flex-col gap-4">
+            <input type="hidden" id="edit-tx-id" value="">
+            
+            <!-- Type Selector: Income / Expense -->
+            <div class="grid grid-cols-2 p-1 bg-bgMain rounded-xl border border-borderDark">
+                <button type="button" id="btn-type-expense" onclick="setTransactionType('expense')" class="py-2 text-xs font-semibold rounded-lg bg-accentRed/20 text-accentRed border border-accentRed/30 transition">Spesa</button>
+                <button type="button" id="btn-type-income" onclick="setTransactionType('income')" class="py-2 text-xs font-semibold rounded-lg text-textMuted hover:text-white transition">Entrata</button>
+            </div>
+
+            <!-- Amount Input -->
+            <div>
+                <label class="block text-xs font-medium text-textMuted mb-1">Importo (€)</label>
+                <input type="number" step="0.01" min="0.01" id="tx-amount" required placeholder="0.00" class="w-full bg-bgMain border border-borderDark rounded-xl px-3.5 py-2.5 text-white font-mono text-lg focus:outline-none focus:border-accentGreen">
+            </div>
+
+            <!-- Category / Subcategory -->
+            <div>
+                <label class="block text-xs font-medium text-textMuted mb-1">Categoria / Sottocategoria</label>
+                <select id="tx-category" required class="w-full bg-bgMain border border-borderDark rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-accentGreen">
+                    <!-- Populated dynamically based on type -->
+                </select>
+            </div>
+
+            <!-- Description / Note -->
+            <div>
+                <label class="block text-xs font-medium text-textMuted mb-1">Descrizione / Nota (Opzionale)</label>
+                <input type="text" id="tx-description" placeholder="Es. Cena pizzeria, Stipendio..." class="w-full bg-bgMain border border-borderDark rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-accentGreen">
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" class="w-full bg-accentGreen text-bgMain font-bold py-3.5 rounded-xl shadow-lg mt-2 active:scale-98 transition">
+                Salva Movimento
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // --- CONSTANTS & STATE MANAGEMENT ---
+        const MONTHS = [
+            "Ottobre 2026", "Novembre 2026", "Dicembre 2026",
+            "Gennaio 2027", "Febbraio 2027", "Marzo 2027",
+            "Aprile 2027", "Maggio 2027", "Giugno 2027",
+            "Luglio 2027", "Agosto 2027", "Settembre 2027"
+        ];
+
+        const CATEGORIES = {
+            income: [
+                "Paghetta", "Regali", "Vinted", "Fondi Precedenti", "Altro"
+            ],
+            expense: {
+                essenziali: ["Spesa", "Cura Personale", "Casa", "Trasporti", "Palestra", "Altro (Essenziali)"],
+                extra: ["Cena Fuori", "Uscite", "Svapo & Terea", "Altro (Extra)"]
+            }
+        };
+
+        let appData = {
+            activeMonthIndex: 0, // 0 = Ottobre 2026
+            transactions: [] // Array of { id, monthIndex, type, category, subType, amount, description, date }
+        };
+
+        let currentType = 'expense';
+        let annualChartInstance = null;
+        let monthlyPieChartInstance = null;
+
+        // --- LOCAL STORAGE PERSISTENCE ---
+        function loadData() {
+            const saved = localStorage.getItem('financial_flow_data');
+            if (saved) {
+                try {
+                    appData = JSON.parse(saved);
+                } catch(e) {
+                    console.error("Error reading saved data", e);
+                }
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('financial_flow_data', JSON.stringify(appData));
+            updateUI();
+        }
+
+        function switchTab(tab) {
+            const viewAnnual = document.getElementById('view-annual');
+            const viewMonthly = document.getElementById('view-monthly');
+            const navAnnual = document.getElementById('nav-annual');
+            const navMonthly = document.getElementById('nav-monthly');
+
+            if (tab === 'annual') {
+                viewAnnual.classList.remove('hidden');
+                viewMonthly.classList.add('hidden');
+                navAnnual.className = "flex flex-col items-center justify-center gap-1 text-accentGreen font-medium transition";
+                navMonthly.className = "flex flex-col items-center justify-center gap-1 text-textMuted font-medium transition";
+            } else {
+                viewAnnual.classList.add('hidden');
+                viewMonthly.classList.remove('hidden');
+                navAnnual.className = "flex flex-col items-center justify-center gap-1 text-textMuted font-medium transition";
+                navMonthly.className = "flex flex-col items-center justify-center gap-1 text-accentGreen font-medium transition";
+            }
+            updateUI();
+        }
+
+        function changeMonth(delta) {
+            let newIndex = appData.activeMonthIndex + delta;
+            if (newIndex >= 0 && newIndex < MONTHS.length) {
+                appData.activeMonthIndex = newIndex;
+                updateUI();
+            }
+        }
+
+        function openModal(editId = null) {
+            const modalSheet = document.getElementById('modal-sheet');
+            const modalBackdrop = document.getElementById('modal-backdrop');
+            
+            document.getElementById('edit-tx-id').value = editId || '';
+            document.getElementById('modal-title').innerText = editId ? 'Modifica Movimento' : 'Nuovo Movimento';
+
+            if (editId) {
+                const tx = appData.transactions.find(t => t.id === editId);
+                if (tx) {
+                    setTransactionType(tx.type);
+                    document.getElementById('tx-amount').value = tx.amount;
+                    document.getElementById('tx-category').value = tx.category;
+                    document.getElementById('tx-description').value = tx.description || '';
+                }
+            } else {
+                setTransactionType('expense');
+                document.getElementById('transaction-form').reset();
+            }
+
+            modalBackdrop.classList.remove('hidden');
+            setTimeout(() => {
+                modalBackdrop.classList.remove('opacity-0');
+                modalSheet.classList.remove('bottom-sheet-hidden');
+            }, 10);
+        }
+
+        function closeModal() {
+            const modalSheet = document.getElementById('modal-sheet');
+            const modalBackdrop = document.getElementById('modal-backdrop');
+
+            modalSheet.classList.add('bottom-sheet-hidden');
+            modalBackdrop.classList.add('opacity-0');
+            setTimeout(() => {
+                modalBackdrop.classList.add('hidden');
+            }, 300);
+        }
+
+        function setTransactionType(type) {
+            currentType = type;
+            const btnExpense = document.getElementById('btn-type-expense');
+            const btnIncome = document.getElementById('btn-type-income');
+            const selectCategory = document.getElementById('tx-category');
+
+            if (type === 'expense') {
+                btnExpense.className = "py-2 text-xs font-semibold rounded-lg bg-accentRed/20 text-accentRed border border-accentRed/30 transition";
+                btnIncome.className = "py-2 text-xs font-semibold rounded-lg text-textMuted hover:text-white transition";
+                
+                selectCategory.innerHTML = `
+                    <optgroup label="Spese Essenziali">
+                        ${CATEGORIES.expense.essenziali.map(c => `<option value="${c}">${c}</option>`).join('')}
+                    </optgroup>
+                    <optgroup label="Spese Extra">
+                        ${CATEGORIES.expense.extra.map(c => `<option value="${c}">${c}</option>`).join('')}
+                    </optgroup>
+                `;
+            } else {
+                btnIncome.className = "py-2 text-xs font-semibold rounded-lg bg-accentGreen/20 text-accentGreen border border-accentGreen/30 transition";
+                btnExpense.className = "py-2 text-xs font-semibold rounded-lg text-textMuted hover:text-white transition";
+                
+                selectCategory.innerHTML = CATEGORIES.income.map(c => `<option value="${c}">${c}</option>`).join('');
+            }
+        }
+
+        function handleSaveTransaction(e) {
+            e.preventDefault();
+            const editId = document.getElementById('edit-tx-id').value;
+            const amount = parseFloat(document.getElementById('tx-amount').value);
+            const category = document.getElementById('tx-category').value;
+            const description = document.getElementById('tx-description').value.trim();
+
+            if (isNaN(amount) || amount <= 0) return;
+
+            let subType = 'income';
+            if (currentType === 'expense') {
+                subType = CATEGORIES.expense.essenziali.includes(category) ? 'essenziale' : 'extra';
+            }
+
+            if (editId) {
+                const index = appData.transactions.findIndex(t => t.id === editId);
+                if (index !== -1) {
+                    appData.transactions[index] = {
+                        ...appData.transactions[index],
+                        type: currentType,
+                        category,
+                        subType,
+                        amount,
+                        description
+                    };
+                }
+            } else {
+                appData.transactions.push({
+                    id: 'tx_' + Date.now(),
+                    monthIndex: appData.activeMonthIndex,
+                    type: currentType,
+                    category,
+                    subType,
+                    amount,
+                    description,
+                    date: new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
+                });
+            }
+
+            saveData();
+            closeModal();
+        }
+
+        function deleteTransaction(id) {
+            appData.transactions = appData.transactions.filter(t => t.id !== id);
+            saveData();
+        }
+
+        function updateUI() {
+            // Update Current Month Header
+            document.getElementById('current-month-display').innerText = MONTHS[appData.activeMonthIndex];
+            
+            // --- Monthly Data Calculation ---
+            const monthTx = appData.transactions.filter(t => t.monthIndex === appData.activeMonthIndex);
+            
+            const monthIncome = monthTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+            const monthExpenses = monthTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            const monthSavings = monthIncome - monthExpenses;
+            const monthWeeklySavings = monthSavings / 4.33;
+
+            document.getElementById('month-income').innerText = `€ ${monthIncome.toFixed(2)}`;
+            document.getElementById('month-expenses').innerText = `€ ${monthExpenses.toFixed(2)}`;
+            document.getElementById('month-savings').innerText = `€ ${monthSavings.toFixed(2)}`;
+            document.getElementById('month-savings').className = `text-lg font-bold font-mono ${monthSavings >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
+            document.getElementById('month-weekly-savings').innerText = `€ ${monthWeeklySavings.toFixed(2)}`;
+
+            // Render Transactions List
+            const listContainer = document.getElementById('transactions-list');
+            document.getElementById('tx-count').innerText = `${monthTx.length} movimenti`;
+
+            if (monthTx.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-8 text-textMuted text-xs flex flex-col items-center gap-2 border border-dashed border-borderDark rounded-2xl">
+                        <i class="fa-solid fa-receipt text-2xl"></i>
+                        <span>Nessun movimento registrato in questo mese.</span>
+                    </div>
+                `;
+            } else {
+                listContainer.innerHTML = monthTx.map(t => `
+                    <div class="bg-bgCard border border-borderDark p-3 rounded-2xl flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl flex items-center justify-center text-sm ${t.type === 'income' ? 'bg-accentGreen/15 text-accentGreen' : 'bg-accentRed/15 text-accentRed'}">
+                                <i class="fa-solid ${t.type === 'income' ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="font-bold text-xs text-white">${t.category}</span>
+                                <span class="text-[11px] text-textMuted">${t.description || t.date}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="font-mono text-sm font-bold ${t.type === 'income' ? 'text-accentGreen' : 'text-accentRed'}">
+                                ${t.type === 'income' ? '+' : '-'}€ ${t.amount.toFixed(2)}
+                            </span>
+                            <div class="flex items-center gap-1">
+                                <button onclick="openModal('${t.id}')" class="text-textMuted hover:text-white p-1">
+                                    <i class="fa-solid fa-pen text-xs"></i>
+                                </button>
+                                <button onclick="deleteTransaction('${t.id}')" class="text-textMuted hover:text-accentRed p-1">
+                                    <i class="fa-solid fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // --- Annual Summary Calculation ---
+            let annualIncome = 0;
+            let annualExpenses = 0;
+            const monthlyStats = MONTHS.map((_, idx) => {
+                const txs = appData.transactions.filter(t => t.monthIndex === idx);
+                const inc = txs.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+                const exp = txs.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+                annualIncome += inc;
+                annualExpenses += exp;
+                return { inc, exp, savings: inc - exp };
+            });
+
+            const annualSavings = annualIncome - annualExpenses;
+            const annualAvgSavings = annualSavings / 12;
+
+            document.getElementById('kpi-annual-income').innerText = `€ ${annualIncome.toFixed(2)}`;
+            document.getElementById('kpi-annual-expenses').innerText = `€ ${annualExpenses.toFixed(2)}`;
+            document.getElementById('kpi-annual-savings').innerText = `€ ${annualSavings.toFixed(2)}`;
+            document.getElementById('kpi-annual-savings').className = `text-xl font-extrabold font-mono ${annualSavings >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
+            document.getElementById('kpi-annual-avg').innerText = `€ ${annualAvgSavings.toFixed(2)}`;
+
+            // Render Charts
+            renderAnnualChart(monthlyStats);
+            renderMonthlyPieChart(monthTx);
+        }
+
+        function renderAnnualChart(monthlyStats) {
+            const ctx = document.getElementById('annualChart').getContext('2d');
+            
+            if (annualChartInstance) annualChartInstance.destroy();
+
+            const labels = ['Ott', 'Nov', 'Dic', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set'];
+
+            annualChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Entrate',
+                            data: monthlyStats.map(s => s.inc),
+                            backgroundColor: '#93C5AF',
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'Spese',
+                            data: monthlyStats.map(s => s.exp),
+                            backgroundColor: '#E88B88',
+                            borderRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#9BAA9E', font: { size: 10 } }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#9BAA9E', font: { size: 9 } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            ticks: { color: '#9BAA9E', font: { size: 9 } },
+                            grid: { color: '#28362E' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderMonthlyPieChart(monthTx) {
+            const ctx = document.getElementById('monthlyPieChart').getContext('2d');
+
+            if (monthlyPieChartInstance) monthlyPieChartInstance.destroy();
+
+            const essenzialiTotal = monthTx.filter(t => t.type === 'expense' && t.subType === 'essenziale').reduce((s, t) => s + t.amount, 0);
+            const extraTotal = monthTx.filter(t => t.type === 'expense' && t.subType === 'extra').reduce((s, t) => s + t.amount, 0);
+
+            if (essenzialiTotal === 0 && extraTotal === 0) {
+                monthlyPieChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Nessuna Spesa'],
+                        datasets: [{
+                            data: [1],
+                            backgroundColor: ['#28362E']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } }
+                    }
+                });
+                return;
+            }
+
+            monthlyPieChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Essenziali', 'Extra'],
+                    datasets: [{
+                        data: [essenzialiTotal, extraTotal],
+                        backgroundColor: ['#93C5AF', '#E88B88'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#9BAA9E', font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function exportToExcel() {
+            const wb = XLSX.utils.book_new();
+
+            // Sheet 1: Prospetto Annuale Summary
+            const annualRows = [
+                ["Financial Flow - Prospetto Annuale (Ottobre 2026 - Settembre 2027)"],
+                [],
+                ["Mese", "Entrate (€)", "Spese (€)", "Risparmio (€)", "Risparmio Settimanale (€)"]
+            ];
+
+            MONTHS.forEach((m, idx) => {
+                const txs = appData.transactions.filter(t => t.monthIndex === idx);
+                const inc = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+                const exp = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+                const sav = inc - exp;
+                annualRows.push([m, inc, exp, sav, sav / 4.33]);
+            });
+
+            const wsAnnual = XLSX.utils.aoa_to_sheet(annualRows);
+            XLSX.utils.book_append_sheet(wb, wsAnnual, "Prospetto Annuale");
+
+            // Sheet 2 to 13: Detailed Monthly Sheets
+            MONTHS.forEach((m, idx) => {
+                const txs = appData.transactions.filter(t => t.monthIndex === idx);
+                const monthRows = [
+                    [`Registro Movimenti - ${m}`],
+                    [],
+                    ["Tipo", "Categoria", "Sottotipo", "Importo (€)", "Note / Descrizione", "Data"]
+                ];
+
+                txs.forEach(t => {
+                    monthRows.push([
+                        t.type === 'income' ? 'Entrata' : 'Spesa',
+                        t.category,
+                        t.subType,
+                        t.amount,
+                        t.description || '',
+                        t.date
+                    ]);
+                });
+
+                const wsMonth = XLSX.utils.aoa_to_sheet(monthRows);
+                // Sheet names must be max 31 chars and no illegal characters
+                const safeSheetName = m.replace(' 2026', '').replace(' 2027', '');
+                XLSX.utils.book_append_sheet(wb, wsMonth, safeSheetName);
+            });
+
+            XLSX.writeFile(wb, "Financial_Flow_Budget.xlsx");
+        }
+
+        function importFromExcel(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const importedTx = [];
+
+                    MONTHS.forEach((m, monthIdx) => {
+                        const safeSheetName = m.replace(' 2026', '').replace(' 2027', '');
+                        const sheet = workbook.Sheets[safeSheetName];
+                        if (sheet) {
+                            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                            // Data starts from row index 3 (0-indexed)
+                            for (let i = 3; i < json.length; i++) {
+                                const row = json[i];
+                                if (row && row.length >= 4) {
+                                    const type = row[0] === 'Entrata' ? 'income' : 'expense';
+                                    const category = row[1] || 'Altro';
+                                    const subType = row[2] || (type === 'income' ? 'income' : 'extra');
+                                    const amount = parseFloat(row[3]) || 0;
+                                    const description = row[4] || '';
+                                    const date = row[5] || '';
+
+                                    if (amount > 0) {
+                                        importedTx.push({
+                                            id: 'tx_imp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+                                            monthIndex: monthIdx,
+                                            type,
+                                            category,
+                                            subType,
+                                            amount,
+                                            description,
+                                            date: date || new Date().toLocaleDateString('it-IT')
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    if (importedTx.length > 0) {
+                        appData.transactions = importedTx;
+                        saveData();
+                        alert("Importazione completata con successo!");
+                    } else {
+                        alert("Nessun dato valido trovato nel file Excel inserito.");
+                    }
+                } catch(err) {
+                    console.error("Errore nell'importazione:", err);
+                    alert("Si è verificato un errore durante l'importazione del file Excel.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Initial launch logic
+        window.onload = function() {
+            loadData();
+            updateUI();
+        };
+    </script>
+</body>
+</html>
